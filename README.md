@@ -17,12 +17,19 @@ Rotating object detection using YOLOv7 and CSL.
 
 
 <details>
-  <summary>DOTA数据集OBB(0.784) (click to expand)</summary>
+  <summary>DOTA数据集OBB(val) (0.7835) (click to expand)</summary>
   <br>
 <p>mAP:78.35</p>
 <p>class aps:  [90.56903172 80.70941623 46.04763298 59.882317   80.20104153 87.27336943
  89.98862253 90.8265387  84.66325542 89.90289903 76.64386534 74.47407929
  76.2255546  67.98867669 79.85177155]</p>
+</details>
+
+<details>
+  <summary>DOTA数据集OBB(test) (0.7840) (click to expand)</summary>
+  <p align="left"><img width="800" src="https://github.com/SSTato/YOLOv7_obb/blob/master/dataset/dataset_demo/results.png"></p>
+  <p> 结果链接：https://github.com/SSTato/YOLOv7_obb/blob/master/dataset/dataset_demo/Task1.png </p>
+
 </details>
 
 <details>
