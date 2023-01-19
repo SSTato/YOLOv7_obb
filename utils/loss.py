@@ -155,11 +155,14 @@ class ComputeLoss:
                 pxy = ps[:, :2].sigmoid() * 2 - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i] # featuremap pixel
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
+                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
+                t_theta = tgaussian_theta[i].type(ps.dtype)
+                
                 if KFIOU:
-                    iou, lbox = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
+                    iou, lbox = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
                     lbox += lbox.mean()  # iou loss
                 else:
-                    iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
+                    iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
@@ -327,6 +330,8 @@ class ComputeLossOTA:
         ltheta = torch.zeros(1, device=device)
         bs, as_, gjs, gis, targets, anchors, tgaussian_theta, indices = self.build_targets(p, targets, imgs)
         pre_gen_gains = [torch.tensor(pp.shape, device=device)[[3, 2, 3, 2]] for pp in p]
+        
+        KFIOU = True
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -347,8 +352,17 @@ class ComputeLossOTA:
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 selected_tbox = targets[i][:, 2:6] * pre_gen_gains[i]
                 selected_tbox[:, :2] -= grid
-                iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
+                # iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
+                # lbox += (1.0 - iou).mean()  # iou loss
+                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
+                t_theta = tgaussian_theta[i].type(ps.dtype)
+                
+                if KFIOU:
+                    iou, lbox = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, KFIOU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
+                    lbox += lbox.mean()  # iou loss
+                else:
+                    iou, _ = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
+                    lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
@@ -372,9 +386,12 @@ class ComputeLossOTA:
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
-
-                t_theta = tgaussian_theta[i].type(ps1.dtype)  # target theta_gaussian_labels
-                ltheta += self.BCEtheta(ps1[:, class_index:], t_theta)
+                
+                if not KFIOU:
+                    t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
+                    ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                else:
+                    pass
 
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
