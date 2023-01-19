@@ -76,7 +76,7 @@ def xy_wh_r_2_xy_sigma(xywhr):
     return xy, sigma
 
 
-#@weighted_loss
+@weighted_loss
 def kfiou_loss(pred,
                target,
                pred_decode=None,
