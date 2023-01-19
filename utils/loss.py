@@ -98,6 +98,7 @@ class ComputeLoss:
         self.sort_obj_iou = False
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
+        # self.KFIOU = KFIOU
 
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
@@ -138,6 +139,8 @@ class ComputeLoss:
         ltheta = torch.zeros(1, device=device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
         tcls, tbox, indices, anchors, tgaussian_theta = self.build_targets(p, targets)  # targets
+        
+        KFIOU = True #KFIOU Enabled
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -152,8 +155,12 @@ class ComputeLoss:
                 pxy = ps[:, :2].sigmoid() * 2 - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i] # featuremap pixel
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
-                iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
+                if KFIOU:
+                    iou, lbox = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
+                    lbox += lbox.mean()  # iou loss
+                else:
+                    iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
+                    lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
@@ -172,8 +179,11 @@ class ComputeLoss:
                     lcls += self.BCEcls(ps[:, 5:class_index], t)  # BCE
                 
                 # theta Classification by Circular Smooth Label
-                t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
-                ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                if not KFIOU:
+                    t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
+                    ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                else:
+                    pass
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
