@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from utils import kfiou
 
 
 def fitness(x):
@@ -198,7 +199,7 @@ class ConfusionMatrix:
             print(' '.join(map(str, self.matrix[i])))
 
 
-def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
+def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7, ptheta=0, ttheta=0):
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
     box2 = box2.T
 
@@ -212,6 +213,27 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=
         b2_x1, b2_x2 = box2[0] - box2[2] / 2, box2[0] + box2[2] / 2
         b2_y1, b2_y2 = box2[1] - box2[3] / 2, box2[1] + box2[3] / 2
 
+    #KFIOU tensor preparation
+    if KFIOU:
+        if x1y1x2y2:
+            xywhbox1 = xyxy2xywh(box1)
+            xywhbox2 = xyxy2xywh(box2)
+        else:
+            xywhbox1 = box1
+            xywhbox2 = box2
+        newbox1 = torch.zeros(5)
+        newbox1[:4] = xywhbox1[:4]
+        newbox1[4] = ptheta
+        
+        newbox2 = torch.zeros(5)
+        newbox2[:4] = xywhbox2[:4]
+        newbox2[4] = ttheta
+        
+        kfbox1, sigma1 = kfiou.xy_wh_r_2_xy_sigma(newbox1)
+        kfbox2, sigma2 = kfiox.union(y).xy_wh_r_2_xy_sigma(newbox2)
+    
+    
+
     # Intersection area
     inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
             (torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)).clamp(0)
@@ -222,18 +244,22 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=
     union = w1 * h1 + w2 * h2 - inter + eps
 
     iou = inter / union
-    if CIoU or DIoU or GIoU:
+    if CIoU or DIoU or GIoU or KFIOU:
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)  # convex (smallest enclosing box) width
         ch = torch.max(b1_y2, b2_y2) - torch.min(b1_y1, b2_y1)  # convex height
-        if CIoU or DIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
+        if CIoU or DIoU or KFIOU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
             c2 = cw ** 2 + ch ** 2 + eps  # convex diagonal squared
             rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 +
                     (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4  # center distance squared
-            if CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
-                v = (4 / math.pi ** 2) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
-                with torch.no_grad():
-                    alpha = v / (v - iou + (1 + eps))
-                return iou - (rho2 / c2 + v * alpha)  # CIoU
+            if CIoU or KFIOU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
+                if CIoU:
+                    v = (4 / math.pi ** 2) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
+                    with torch.no_grad():
+                        alpha = v / (v - iou + (1 + eps))
+                    return iou - (rho2 / c2 + v * alpha)  # CIoU
+                else:
+                    lkfiou = kfiou.kfiou_loss(pred=newbox1, target=newbox2, pred_decode=newbox1, targets_decode=newbox2)
+                    return lkfiou
             else:
                 return iou - rho2 / c2  # DIoU
         else:  # GIoU https://arxiv.org/pdf/1902.09630.pdf
