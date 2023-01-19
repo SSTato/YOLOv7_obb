@@ -152,6 +152,7 @@ class ComputeLoss:
                 ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets, (n_targets, self.no)
 
                 # Regression
+                class_index = 5 + self.nc #moved up to assign vars
                 pxy = ps[:, :2].sigmoid() * 2 - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i] # featuremap pixel
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
@@ -345,6 +346,7 @@ class ComputeLossOTA:
                 ps1 = pi[b1, a1, gj1, gi1]
 
                 # Regression
+                class_index = 5 + self.nc #moved up to assign vars
                 grid = torch.stack([gi, gj], dim=1)
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
                 # pxy = ps[:, :2].sigmoid() * 3. - 1.
