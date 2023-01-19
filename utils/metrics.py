@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from utils import kfiou
+from utils.general import xyxy2xywh, xyxy2xywhn
 
 
 def fitness(x):
@@ -231,8 +232,6 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         
         kfbox1, sigma1 = kfiou.xy_wh_r_2_xy_sigma(newbox1)
         kfbox2, sigma2 = kfiox.union(y).xy_wh_r_2_xy_sigma(newbox2)
-    
-    
 
     # Intersection area
     inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
@@ -258,8 +257,8 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
                         alpha = v / (v - iou + (1 + eps))
                     return iou - (rho2 / c2 + v * alpha)  # CIoU
                 else:
-                    lkfiou = kfiou.kfiou_loss(pred=newbox1, target=newbox2, pred_decode=newbox1, targets_decode=newbox2)
-                    return lkfiou
+                    iou, loss_kfiou = kfiou.kfiou_loss(pred=newbox1, target=newbox2, pred_decode=newbox1, targets_decode=newbox2)
+                    return iou, loss_kfiou
             else:
                 return iou - rho2 / c2  # DIoU
         else:  # GIoU https://arxiv.org/pdf/1902.09630.pdf
