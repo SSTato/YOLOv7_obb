@@ -122,7 +122,7 @@ def kfiou_loss(pred,
 
     loss = (xy_loss + kf_loss).clamp(0)
 
-    return loss
+    return KFIoU, loss
 
 
 #@ROTATED_LOSSES.register_module()
