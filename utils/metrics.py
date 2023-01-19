@@ -12,6 +12,8 @@ import numpy as np
 import torch
 from utils import kfiou
 
+global device 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def fitness(x):
     # Model fitness as a weighted combination of metrics
@@ -243,16 +245,20 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         else:
             xywhbox1 = box1
             xywhbox2 = box2
-        newbox1 = torch.zeros(5)
-        newbox1[:4] = xywhbox1[:4]
+        newbox1 = torch.zeros_like(box1)
+        sze = newbox1.size(dim=1)
+        newbox1 = torch.cat((newbox1, torch.zeros(sze)), 0).to(device)
+        newbox1[:4, :] = xywhbox1[:4, :]
         newbox1[4] = ptheta
         
-        newbox2 = torch.zeros(5)
-        newbox2[:4] = xywhbox2[:4]
+        newbox2 = torch.zeros_like(box2).to(device)
+        sze = newbox2.size(dim=1)
+        newbox2 = torch.cat((newbox2, torch.zeros(sze)), 0).to(device)
+        newbox2[:4,:] = xywhbox2[:,:4]
         newbox2[4] = ttheta
         
         kfbox1, sigma1 = kfiou.xy_wh_r_2_xy_sigma(newbox1)
-        kfbox2, sigma2 = kfiox.union(y).xy_wh_r_2_xy_sigma(newbox2)
+        kfbox2, sigma2 = kfiou.xy_wh_r_2_xy_sigma(newbox2)
 
     # Intersection area
     inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
