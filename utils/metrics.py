@@ -244,13 +244,13 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         else:
             xywhbox1 = box1
             xywhbox2 = box2
-        newbox1 = torch.zeros_like(box1).to('cpu')
+        newbox1 = torch.zeros_like(box1).to(device)
         sze = newbox1.size(dim=1)
         newbox1 = torch.cat((newbox1, torch.zeros(sze)), 0).to(device)
         newbox1[:4, :] = xywhbox1[:4, :]
         newbox1[4] = ptheta
         
-        newbox2 = torch.zeros_like(box2).to('cpu')
+        newbox2 = torch.zeros_like(box2).to(device)
         sze = newbox2.size(dim=1)
         newbox2 = torch.cat((newbox2, torch.zeros(sze)), 0).to(device)
         newbox2[:4,:] = xywhbox2[:,:4]
