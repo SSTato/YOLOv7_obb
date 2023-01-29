@@ -65,6 +65,9 @@ def kfiou_loss(pred,
     diff = torch.abs(xy_p - xy_t)
     xy_loss = torch.where(diff < beta, 0.5 * diff * diff / beta,
                           diff - 0.5 * beta).sum(dim=-1)
+    Sigma_p = Sigma_p.to(dtype=torch.float)
+    Sigma_t = Sigma_t.to(dtype=torch.float)
+    
     Vb_p = 4 * Sigma_p.det().sqrt()
     Vb_t = 4 * Sigma_t.det().sqrt()
     K = Sigma_p.bmm((Sigma_p + Sigma_t).inverse())
