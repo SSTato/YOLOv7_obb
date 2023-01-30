@@ -159,7 +159,8 @@ class ComputeLoss:
                 p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
                 t_theta = tgaussian_theta[i].type(ps.dtype)
                 
-                if KFIOU:
+                kfiou_fun = False #assume no special final kfiou function
+                if kfiou_fun:
                     iou, lbox = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
                     lbox += lbox.mean()  # iou loss
                 else:
@@ -210,8 +211,14 @@ class ComputeLoss:
         ltheta *= self.hyp['theta']
         bs = tobj.shape[0]  # batch size
 
+        losstensorA = (lbox + lobj + lcls + ltheta) * bs
+        losstensorA = losstensorA.type(torch.HalfTensor).to(device)
+
+        losstensorB = torch.cat((lbox, lobj, lcls, ltheta)).detach()
+        losstensorB = losstensorB.type(torch.HalfTensor).to(device)
+
         # return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
-        return (lbox + lobj + lcls + ltheta) * bs, torch.cat((lbox, lobj, lcls, ltheta)).detach()
+        return losstensorA, losstensorB
 
     def build_targets(self, p, targets):
         """
