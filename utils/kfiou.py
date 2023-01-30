@@ -95,9 +95,11 @@ def kfiou_loss(pred,
     kf_loss = kf_loss.to(device)
 
     loss = (xy_loss + kf_loss).clamp(0)
-    print(len(KFIoU))
-    print(len(loss))
+    #print(KFIoU.size())
+    #print(loss.size())
 
+    #always convert results back to float16 or 'half-float'
+    #loss = loss.type(torch.HalfTensor).to(device)
     return KFIoU, loss
 
 
