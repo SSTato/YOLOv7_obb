@@ -249,11 +249,21 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         catcon1 = torch.zeros(1, sze).to(device)
         newbox1 = torch.cat((newbox1, catcon1), 0).to(device)
         newbox1[:4, :] = xywhbox1[:4, :]
-        pthetanew = torch.zeros(sze).to(device)
+        
+        pthetanew_prob = torch.zeros(sze).to(device)
+        pthetanew = torch.zeros(sze).to('cpu')
+        
         for i in range(sze):
-            pthetanew[i] = ptheta[i, :].mean() #we have learned that there are 180 angular dimensions for each box(895), calculating their mean will achieve an average angle of each box in radians
+            pthetanew_prob[i] = ptheta[i, :].max() #we have learned that there are 180 angular dimensions for each box(895), calculating their mean will achieve an average angle of each box in radians
+            p_angle = (tensor == pthetanew_prob[i]).nonzero(as_tuple=False).to('cpu')
+            p_angle = p_angle.squeeze()
+            p_angle = p_angle.item()
+            p_angle = p_angle * (math.pi / 180)
+            pthetanew[i] = p_angle
+        pthetanew = pthetanew.to(device)
         newbox1[4, :] = pthetanew
-
+        angle = 
+        
         #newbox1a = torch.zeros(sze, 5).to(device)
         newbox1a = torch.transpose(newbox1, 0, 1).to(device)
         #for i in range(sze):
@@ -265,9 +275,18 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         catcon2 = torch.zeros(1, sze).to(device)
         newbox2 = torch.cat((newbox2, catcon2), 0).to(device)
         newbox2[:4, :] = xywhbox2[:4, :]
-        tthetanew = torch.zeros(sze).to(device)
+        
+        tthetanew_prob = torch.zeros(sze).to(device)
+        tthetanew = torch.zeros(sze).to('cpu')
+        
         for i in range(sze):
-            tthetanew[i] = ttheta[i, :].mean()
+            tthetanew_prob[i] = ttheta[i, :].max()
+            t_angle = (tensor == tthetanew_prob[i]).nonzero(as_tuple=False).to('cpu')
+            t_angle = t_angle.squeeze()
+            t_angle = t_angle.item()
+            t_angle = t_angle * (math.pi / 180)
+            tthetanew[i] = t_angle
+        tthetanew = tthetanew.to(device)
         newbox2[4, :] = tthetanew
 
         #newbox2a = torch.zeros(sze, 5).to(device)
