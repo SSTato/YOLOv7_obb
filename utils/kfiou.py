@@ -8,7 +8,7 @@ import torch
 from torch import nn
 
 #from ..builder import ROTATED_LOSSES
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def xy_wh_r_2_xy_sigma(xywhr):
     """Convert oriented bounding box to 2-D Gaussian distribution.
@@ -66,16 +66,22 @@ def kfiou_loss(pred,
     xy_loss = torch.where(diff < beta, 0.5 * diff * diff / beta,
                           diff - 0.5 * beta).sum(dim=-1)
     
-    Sigma_p_det = Sigma_p.det() ** 0.5
-    Sigma_t_det = Sigma_t.det() ** 0.5
-    
-    Vb_p = 4 * Sigma_p_det
-    Vb_t = 4 * Sigma_t_det
+    #convert sigma_p&t to float32 or 'full-float' to support pytorch linear algebra functions
+    Sigma_p = Sigma_p.type(torch.FloatTensor)
+    Sigma_t = Sigma_t.type(torch.FloatTensor)
+
+    #calculate the Vb of p & t
+    Vb_p = 4 * Sigma_p.det().sqrt()
+    Vb_t = 4 * Sigma_t.det().sqrt()
+
     K = Sigma_p.bmm((Sigma_p + Sigma_t).inverse())
     Sigma = Sigma_p - K.bmm(Sigma_p)
     Vb = 4 * Sigma.det().sqrt()
     Vb = torch.where(torch.isnan(Vb), torch.full_like(Vb, 0), Vb)
     KFIoU = Vb / (Vb_p + Vb_t - Vb + eps)
+
+    #always convert results back to float16 or 'half-float'
+    KFIoU = KFIoU.type(torch.HalfTensor)
 
     if fun == 'ln':
         kf_loss = -torch.log(KFIoU + eps)
@@ -83,6 +89,10 @@ def kfiou_loss(pred,
         kf_loss = torch.exp(1 - KFIoU) - 1
     else:
         kf_loss = 1 - KFIoU
+
+    #move all related tensors to GPU before finalisation
+    xy_loss = xy_loss.to(device)
+    kf_loss = kf_loss.to(device)
 
     loss = (xy_loss + kf_loss).clamp(0)
 
