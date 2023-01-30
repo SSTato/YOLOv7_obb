@@ -95,6 +95,8 @@ def kfiou_loss(pred,
     kf_loss = kf_loss.to(device)
 
     loss = (xy_loss + kf_loss).clamp(0)
+    print(len(KFIoU))
+    print(len(loss))
 
     return KFIoU, loss
 
