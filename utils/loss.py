@@ -167,6 +167,7 @@ class ComputeLoss:
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
+                iou = iou.to(device)
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
                 if self.sort_obj_iou:
                     sort_id = torch.argsort(score_iou)
@@ -183,11 +184,13 @@ class ComputeLoss:
                     lcls += self.BCEcls(ps[:, 5:class_index], t)  # BCE
                 
                 # theta Classification by Circular Smooth Label
-                if not KFIOU:
-                    t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
-                    ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
-                else:
+                CSL = True #csl is on
+                t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
+                ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                if CSL:
                     pass
+                else:
+                    ltheta = torch.zeros_like(ltheta)
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
