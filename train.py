@@ -1301,7 +1301,7 @@ def main(opt, callbacks=Callbacks()):
         LOGGER.info(f'Hyperparameter evolution finished\n'
                     f"Results saved to {colorstr('bold', save_dir)}\n"
                     f'Use best hyperparameters example: $ python train.py --hyp {evolve_yaml}')
-        break #inserted to prevent double training
+        sys.exit() #inserted to prevent double training
 
 def run(**kwargs):
     # Usage: import train; train.run(data='coco128.yaml', imgsz=320, weights='yolov5m.pt')
