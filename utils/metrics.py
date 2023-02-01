@@ -221,6 +221,20 @@ class ConfusionMatrix:
         for i in range(self.nc + 1):
             print(' '.join(map(str, self.matrix[i])))
 
+def angulation(angten):
+    sze = angten.size(dim=1)
+    thetanew_prob = torch.zeros(sze).to(device)
+    thetanew = torch.zeros(sze).to('cpu')
+        
+    for i in range(sze):
+        thetanew_prob[i] = angten[i, :].max() #we have learned that there are 180 angular dimensions for each box(895), calculating their mean will achieve an average angle of each box in radians
+        angle = (angten == thetanew_prob[i]).nonzero(as_tuple=False).to('cpu')
+        angle = angle.squeeze()
+        angle = angle.item()
+        angle = (angle - 90) * (math.pi / 180) #according to the original csl definition, yv5obb uses -pi/2, +pi/2 angular definition method
+        thetanew[i] = angle
+    thetanew = thetanew.to(device)
+    return thetanew
 
 def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIOU=False, eps=1e-7, ptheta=0, ttheta=0):
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
@@ -250,19 +264,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         newbox1 = torch.cat((newbox1, catcon1), 0).to(device)
         newbox1[:4, :] = xywhbox1[:4, :]
         
-        pthetanew_prob = torch.zeros(sze).to(device)
-        pthetanew = torch.zeros(sze).to('cpu')
-        
-        for i in range(sze):
-            pthetanew_prob[i] = ptheta[i, :].max() #we have learned that there are 180 angular dimensions for each box(895), calculating their mean will achieve an average angle of each box in radians
-            p_angle = (tensor == pthetanew_prob[i]).nonzero(as_tuple=False).to('cpu')
-            p_angle = p_angle.squeeze()
-            p_angle = p_angle.item()
-            p_angle = p_angle * (math.pi / 180)
-            pthetanew[i] = p_angle
-        pthetanew = pthetanew.to(device)
-        newbox1[4, :] = pthetanew
-        angle = 
+        newbox1[4, :] = angulation(ptheta)
         
         #newbox1a = torch.zeros(sze, 5).to(device)
         newbox1a = torch.transpose(newbox1, 0, 1).to(device)
@@ -276,18 +278,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         newbox2 = torch.cat((newbox2, catcon2), 0).to(device)
         newbox2[:4, :] = xywhbox2[:4, :]
         
-        tthetanew_prob = torch.zeros(sze).to(device)
-        tthetanew = torch.zeros(sze).to('cpu')
-        
-        for i in range(sze):
-            tthetanew_prob[i] = ttheta[i, :].max()
-            t_angle = (tensor == tthetanew_prob[i]).nonzero(as_tuple=False).to('cpu')
-            t_angle = t_angle.squeeze()
-            t_angle = t_angle.item()
-            t_angle = t_angle * (math.pi / 180)
-            tthetanew[i] = t_angle
-        tthetanew = tthetanew.to(device)
-        newbox2[4, :] = tthetanew
+        newbox2[4, :] = angulation(ttheta)
 
         #newbox2a = torch.zeros(sze, 5).to(device)
         newbox2a = torch.transpose(newbox2, 0, 1).to(device)
