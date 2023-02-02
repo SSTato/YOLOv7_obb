@@ -125,6 +125,7 @@ class ComputeLoss:
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, 1.0, h, autobalance
         self.BCEtheta = BCEtheta
         self.kldbbox = KLDloss(taf=1.0,fun='sqrt')
+        self.kfioubox = KFiou(beta=1.0 / 9.0, eps=1e-6, fun='none')
         for k in 'na', 'nc', 'nl', 'anchors':
             setattr(self, k, getattr(det, k))
 
@@ -142,9 +143,9 @@ class ComputeLoss:
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         ltheta = torch.zeros(1, device=device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
-        tcls, tbox, indices, anchors, tgaussian_theta, build_targets, ttheta = self.build_targets(p, targets)  # targets
+        tcls, tbox, indices, anchors, tgaussian_theta, ttheta = self.build_targets(p, targets)  # targets
         
-        #mode = 'KLD' 'KFIOU' 'CIOU' Select mode
+        mode = 'KLD' #'KFIOU' 'CIOU' Select mode
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -166,22 +167,26 @@ class ComputeLoss:
                 p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
                 t_theta = tgaussian_theta[i].type(ps.dtype)
                 
-                if KLD:
+                if mode == 'KLD':
                     kldloss = self.kldbbox(pbox_theta, selected_tbox_theta)
                     lbox += kldloss.mean()  # iou loss
+                elif mode == 'KFIOU':
+                    kfiouloss, iou = self.kfioubox(pbox_theta, selected_tbox_theta)
+                    lbox += kfiouloss.mean()
                 else:
-                    iou, _ = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target) 
-                    #lbox += lbox.mean()  # iou loss  
-                    #iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
+                    iou, _ = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
-                iou = iou.type(torch.FloatTensor).to(device)
-                score_iou = iou.detach().clamp(0).type(tobj.dtype)
-                if self.sort_obj_iou:
-                    sort_id = torch.argsort(score_iou)
-                    b, a, gj, gi, score_iou = b[sort_id], a[sort_id], gj[sort_id], gi[sort_id], score_iou[sort_id]
-                tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * score_iou  # iou ratio
+                if mode == 'KLD':
+                    tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * (1 - kldloss).detach().clamp(min=0, max=1).type(tobj.dtype) # iou ratio
+                else:
+                    iou = iou.type(torch.FloatTensor).to(device)
+                    score_iou = iou.detach().clamp(0).type(tobj.dtype)
+                    if self.sort_obj_iou:
+                        sort_id = torch.argsort(score_iou)
+                        b, a, gj, gi, score_iou = b[sort_id], a[sort_id], gj[sort_id], gi[sort_id], score_iou[sort_id]
+                    tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * score_iou  # iou ratio
 
                 # Classification
                 class_index = 5 + self.nc
@@ -302,7 +307,7 @@ class ComputeLoss:
             tgaussian_theta.append(gaussian_theta_labels)
 
         # return tcls, tbox, indices, anch
-        return tcls, tbox, indices, anch, tgaussian_theta, tbox_theta.
+        return tcls, tbox, indices, anch, tgaussian_theta, tbox_theta
 
 
 class ComputeLossOTA:
