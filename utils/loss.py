@@ -5,6 +5,7 @@ Loss functions
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from utils.metrics import bbox_iou
 from utils.torch_utils import is_parallel
@@ -12,7 +13,8 @@ from utils.torch_utils import is_parallel
 import torch.nn.functional as F
 
 from utils.general import box_iou,  xywh2xyxy
-
+from utils.kld_loss import compute_kld_loss,KLDloss #KLDloss_new, 
+from utils.kfiou import KFiou
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
@@ -140,7 +142,7 @@ class ComputeLoss:
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
         tcls, tbox, indices, anchors, tgaussian_theta = self.build_targets(p, targets)  # targets
         
-        KFIOU = True #KFIOU Enabled
+        #mode = 'KLD' 'KFIOU' 'CIOU' Select mode
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -155,15 +157,20 @@ class ComputeLoss:
                 class_index = 5 + self.nc #moved up to assign vars
                 pxy = ps[:, :2].sigmoid() * 2 - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i] # featuremap pixel
+                pangle = (ps[:, 4:5].sigmoid() - 0.5) * torch.pi
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
+                pbox_theta = torch.cat((pxy, pwh, pangle), 1)  # predicted box
+                selected_tbox_theta = torch.cat((tbox[i], ttheta[i]),1)
                 p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
                 t_theta = tgaussian_theta[i].type(ps.dtype)
                 
-                if KFIOU:
-                    iou, lbox = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
-                    lbox += lbox.mean()  # iou loss
+                if KLD:
+                    kldloss = self.kldbbox(pbox_theta, selected_tbox_theta)
+                    lbox += kldloss.mean()  # iou loss
                 else:
-                    iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
+                    iou, _ = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, KFIOU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target) 
+                    #lbox += lbox.mean()  # iou loss  
+                    #iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
