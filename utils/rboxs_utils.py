@@ -113,13 +113,18 @@ def rbox2poly(obboxes):
         polys (array/tensor): (num_gts, [x1 y1 x2 y2 x3 y3 x4 y4]) 
     """
     if isinstance(obboxes, torch.Tensor):
-        center, w, h, theta = obboxes[:, :2], obboxes[:, 2:3], obboxes[:, 3:4], obboxes[:, 4:5]
+        center, w, h, theta = obboxes[:, :, :2], obboxes[:, :, 2:3], obboxes[:, :, 3:4], obboxes[:, :, 4:5]
         Cos, Sin = torch.cos(theta), torch.sin(theta)
-
+        print(center.size())
+        
         vector1 = torch.cat(
             (w/2 * Cos, -w/2 * Sin), dim=-1)
         vector2 = torch.cat(
             (-h/2 * Sin, -h/2 * Cos), dim=-1)
+
+        print(vector1.size())
+        print(vector2.size())
+
         point1 = center + vector1 + vector2
         point2 = center + vector1 - vector2
         point3 = center - vector1 - vector2
