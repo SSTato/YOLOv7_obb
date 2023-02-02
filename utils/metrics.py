@@ -221,22 +221,8 @@ class ConfusionMatrix:
         for i in range(self.nc + 1):
             print(' '.join(map(str, self.matrix[i])))
 
-def angulation(angten):
-    sze = angten.size(dim=1)
-    thetanew_prob = torch.zeros(sze).to(device)
-    thetanew = torch.zeros(sze).to('cpu')
-        
-    for i in range(sze):
-        thetanew_prob[i] = angten[i, :].max() #we have learned that there are 180 angular dimensions for each box(895), calculating their mean will achieve an average angle of each box in radians
-        angle = (angten == thetanew_prob[i]).nonzero(as_tuple=False).to('cpu')
-        angle = angle.squeeze()
-        angle = angle.item()
-        angle = (angle - 90) * (math.pi / 180) #according to the original csl definition, yv5obb uses -pi/2, +pi/2 angular definition method
-        thetanew[i] = angle
-    thetanew = thetanew.to(device)
-    return thetanew
 
-def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIOU=False, eps=1e-7, ptheta=0, ttheta=0):
+def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
     box2 = box2.T
 
@@ -250,47 +236,6 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
         b2_x1, b2_x2 = box2[0] - box2[2] / 2, box2[0] + box2[2] / 2
         b2_y1, b2_y2 = box2[1] - box2[3] / 2, box2[1] + box2[3] / 2
 
-    #KFIOU tensor preparation
-    if KFIOU:
-        if x1y1x2y2:
-            xywhbox1 = xyxy2xywh(box1)
-            xywhbox2 = xyxy2xywh(box2)
-        else:
-            xywhbox1 = box1
-            xywhbox2 = box2
-        newbox1 = torch.zeros_like(box1).to(device)
-        sze = newbox1.size(dim=1)
-        catcon1 = torch.zeros(1, sze).to(device)
-        newbox1 = torch.cat((newbox1, catcon1), 0).to(device)
-        newbox1[:4, :] = xywhbox1[:4, :]
-        
-        newbox1[4, :] = angulation(ptheta)
-        
-        #newbox1a = torch.zeros(sze, 5).to(device)
-        newbox1a = torch.transpose(newbox1, 0, 1).to(device)
-        #for i in range(sze):
-            #for j in range(5):
-                #newbox1a[i, j] = newbox1[j, i]
-        
-        newbox2 = torch.zeros_like(box2).to(device)
-        sze = newbox2.size(dim=1)
-        catcon2 = torch.zeros(1, sze).to(device)
-        newbox2 = torch.cat((newbox2, catcon2), 0).to(device)
-        newbox2[:4, :] = xywhbox2[:4, :]
-        
-        newbox2[4, :] = angulation(ttheta)
-
-        #newbox2a = torch.zeros(sze, 5).to(device)
-        newbox2a = torch.transpose(newbox2, 0, 1).to(device)
-        #for i in range(sze):
-            #for j in range(5):
-                #newbox2a[i, j] = newbox2[j, i] 
-        
-        #the indexing method in KFIOU is vastly differnt from other IOUs. Thus, a transpose is required
-        
-        kfbox1, sigma1 = kfiou.xy_wh_r_2_xy_sigma(newbox1a)
-        kfbox2, sigma2 = kfiou.xy_wh_r_2_xy_sigma(newbox2a)
-
     # Intersection area
     inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
             (torch.min(b1_y2, b2_y2) - torch.max(b1_y1, b2_y1)).clamp(0)
@@ -301,22 +246,18 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, KFIO
     union = w1 * h1 + w2 * h2 - inter + eps
 
     iou = inter / union
-    if CIoU or DIoU or GIoU or KFIOU:
+    if CIoU or DIoU or GIoU:
         cw = torch.max(b1_x2, b2_x2) - torch.min(b1_x1, b2_x1)  # convex (smallest enclosing box) width
         ch = torch.max(b1_y2, b2_y2) - torch.min(b1_y1, b2_y1)  # convex height
-        if CIoU or DIoU or KFIOU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
+        if CIoU or DIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
             c2 = cw ** 2 + ch ** 2 + eps  # convex diagonal squared
             rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 +
                     (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4  # center distance squared
-            if CIoU or KFIOU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
-                if CIoU:
-                    v = (4 / math.pi ** 2) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
-                    with torch.no_grad():
-                        alpha = v / (v - iou + (1 + eps))
-                    return iou - (rho2 / c2 + v * alpha)  # CIoU
-                else:
-                    iou, loss_kfiou = kfiou.kfiou_loss(pred=newbox1a, target=newbox2a, pred_decode=newbox1a, targets_decode=newbox2a)
-                    return iou, loss_kfiou
+            if CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
+                v = (4 / math.pi ** 2) * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
+                with torch.no_grad():
+                    alpha = v / (v - iou + (1 + eps))
+                return iou - (rho2 / c2 + v * alpha)  # CIoU
             else:
                 return iou - rho2 / c2  # DIoU
         else:  # GIoU https://arxiv.org/pdf/1902.09630.pdf
