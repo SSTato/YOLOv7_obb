@@ -14,7 +14,7 @@ import torch.nn.functional as F
 
 from utils.general import box_iou,  xywh2xyxy
 from utils.kld_loss import compute_kld_loss,KLDloss #KLDloss_new, 
-from utils.kfiou import KFiou, xy_wh_r_2_xy_sigma
+from utils.kfiou import KFiou, xy_wh_r_2_xy_sigma_old
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
@@ -142,8 +142,7 @@ class ComputeLoss:
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         ltheta = torch.zeros(1, device=device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
-        tcls, tbox, indices, anchors, tgaussian_theta = self.build_targets(p, targets)  # targets
-        ttheta = tgaussian_theta
+        tcls, tbox, indices, anchors, tgaussian_theta, build_targets, ttheta = self.build_targets(p, targets)  # targets
         
         #mode = 'KLD' 'KFIOU' 'CIOU' Select mode
 
@@ -238,7 +237,7 @@ class ComputeLoss:
         """
         # Build targets for compute_loss()
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
-        tcls, tbox, indices, anch = [], [], [], []
+        tcls, tbox, tbox_theta, indices, anch = [], [], [], [], []
         # ttheta, tgaussian_theta = [], []
         tgaussian_theta = []
         # gain = torch.ones(7, device=targets.device)  # normalized to gridspace gain
@@ -287,8 +286,8 @@ class ComputeLoss:
             b, c = t[:, :2].long().T  # image, class; (n_filter2)
             gxy = t[:, 2:4]  # grid xy
             gwh = t[:, 4:6]  # grid wh
-            # theta = t[:, 6:7]
-            gaussian_theta_labels = theta = t[:, 6:7] #t[:, 7:-1]
+            gaussian_theta_labels = t[:, 7:-1]
+            theta = t[:, 6:7]
             gij = (gxy - offsets).long()
             gi, gj = gij.T  # grid xy indices
 
@@ -299,11 +298,11 @@ class ComputeLoss:
             tbox.append(torch.cat((gxy - gij, gwh), 1))  # box
             anch.append(anchors[a])  # anchors
             tcls.append(c)  # class
-            # ttheta.append(theta) # theta, θ∈[-pi/2, pi/2)
+            tbox_theta.append(theta) # theta, θ∈[-pi/2, pi/2)
             tgaussian_theta.append(gaussian_theta_labels)
 
         # return tcls, tbox, indices, anch
-        return tcls, tbox, indices, anch, tgaussian_theta #, ttheta
+        return tcls, tbox, indices, anch, tgaussian_theta, tbox_theta.
 
 
 class ComputeLossOTA:
