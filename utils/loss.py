@@ -177,7 +177,7 @@ class ComputeLoss:
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
-                if mode == 'KLD':
+                if self.mode == 'KLD':
                     tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * (1 - kldloss).detach().clamp(min=0, max=1).type(tobj.dtype) # iou ratio
                 else:
                     iou = iou.type(torch.FloatTensor).to(device)
