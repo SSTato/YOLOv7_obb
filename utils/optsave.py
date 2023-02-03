@@ -10,7 +10,7 @@ def savevar(var):
 def loadvar():
 
     # Open the file in binary mode
-    with open('file.pkl', 'rb') as file:
+    with open('savevars.pkl', 'rb') as file:
         # Call load method to deserialze
         var = pickle.load(file)
         print(var + 'mode selected')
