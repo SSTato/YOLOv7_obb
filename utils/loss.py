@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from utils.general import box_iou,  xywh2xyxy
 from utils.kld_loss import compute_kld_loss,KLDloss #KLDloss_new, 
 from utils.kfiou import KFiou, xy_wh_r_2_xy_sigma_old
+from utils.optsave import savevar, loadvar
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
@@ -100,7 +101,7 @@ class ComputeLoss:
         self.sort_obj_iou = False
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
-        # self.KFIOU = KFIOU
+        self.mode = loadvar()
 
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
@@ -144,8 +145,6 @@ class ComputeLoss:
         ltheta = torch.zeros(1, device=device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
         tcls, tbox, indices, anchors, tgaussian_theta, ttheta = self.build_targets(p, targets)  # targets
-        
-        mode = 'KLD' #'KFIOU' 'CIOU' Select mode
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -167,10 +166,10 @@ class ComputeLoss:
                 p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
                 t_theta = tgaussian_theta[i].type(ps.dtype)
                 
-                if mode == 'KLD':
+                if self.mode == 'KLD':
                     kldloss = self.kldbbox(pbox_theta, selected_tbox_theta)
                     lbox += kldloss.mean()  # iou loss
-                elif mode == 'KFIOU':
+                elif self.mode == 'KFIOU':
                     kfiouloss, iou = self.kfioubox(pbox_theta, selected_tbox_theta)
                     lbox += kfiouloss.mean()
                 else:
