@@ -65,7 +65,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
           ):
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
-        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze, opt.mode
+        opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
 
     #Save mode
     smode = opt.mode
