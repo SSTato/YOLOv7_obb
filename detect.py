@@ -126,11 +126,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
         # Process predictions
         for i, det in enumerate(pred):  # per image
-            det2 = torch.stack(det, dim=0).detach()
-            det3 = det2.clone().detach()
-            print(det2.size())
-            print(det3.size())
-            pred_poly = rbox2poly(det3[:, :, :5]) # (n, [x1 y1 x2 y2 x3 y3 x4 y4])
+            pred_poly = rbox2poly(det[:, :5]) # (n, [x1 y1 x2 y2 x3 y3 x4 y4])
             seen += 1
             if webcam:  # batch_size >= 1
                 p, im0, frame = path[i], im0s[i].copy(), dataset.count
@@ -149,17 +145,15 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 # Rescale polys from img_size to im0 size
                 # det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
                 pred_poly = scale_polys(im.shape[2:], pred_poly, im0.shape)
-                det3 = torch.cat((pred_poly, det3[:, :, -2:]), dim=-1) # (n, [poly conf cls])
-                print(det3.size())
+                det = torch.cat((pred_poly, det[:, -2:]), dim=1) # (n, [poly conf cls])
 
                 # Print results
-                for c in det3[:, :, -1].unique():
-                    n = (det3[:, :, -1] == c).sum()  # detections per class
+                for c in det[:, -1].unique():
+                    n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                singleclass = True
-                for *poly, conf, cls in reversed(det3):
+                for *poly, conf, cls in reversed(det):
                     if save_txt:  # Write to file
                         # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         # poly = poly.tolist()
@@ -168,28 +162,14 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or save_crop or view_img:  # Add poly to image
-                        if singleclass:
-                            c = 0
-                        #cls = cls.type('torch.LongTensor')
-                        else:
-                            c = int(cls)  # integer class
+                        c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         # annotator.box_label(xyxy, label, color=colors(c, True))
-                        poly2 = torch.stack(poly).detach()
-                        print(poly2.size())
-                        sze = poly2.size(dim=0)
-                        for ij in range(sze):
-                            poly3 = poly2[ij, :]
-                            if singleclass:
-                                annotator.poly_label(poly3, label, color=(128, 128, 128))
-                            else:
-                                annotator.poly_label(poly3, label, color=colors(c, True))
-                            if save_crop: # Yolov5-obb doesn't support it yet
+                        annotator.poly_label(poly, label, color=colors(c, True))
+                        if save_crop: # Yolov5-obb doesn't support it yet
                             # save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-                                pass
+                            pass
 
-            #det = torch.unsqueeze(det, 0)
-            det = torch.unbind(det)
             # Print time (inference-only)
             LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
 
