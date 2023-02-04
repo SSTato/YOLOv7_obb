@@ -45,7 +45,6 @@ pd.options.display.max_columns = 10
 cv2.setNumThreads(0)  # prevent OpenCV from multithreading (incompatible with PyTorch DataLoader)
 os.environ['NUMEXPR_MAX_THREADS'] = str(NUM_THREADS)  # NumExpr max threads
 
-
 def set_logging(name=None, verbose=True):
     # Sets level and returns logger
     for h in logging.root.handlers:
@@ -806,7 +805,6 @@ def non_max_suppression_obb(prediction, conf_thres=0.25, iou_thres=0.45, classes
     Returns:
         list of detections, len=batch_size, on (n,7) tensor per image [xylsθ, conf, cls] θ ∈ [-pi/2, pi/2)
     """
-
     nc = prediction.shape[2] - 5 - 180  # number of classes
     xc = prediction[..., 4] > conf_thres  # candidates
     class_index = nc + 5
