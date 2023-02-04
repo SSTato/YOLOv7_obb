@@ -20,6 +20,7 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+import numpy as np
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -34,6 +35,7 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 from utils.rboxs_utils import poly2rbox, rbox2poly
+from utils.optsave import savevar, loadvar, savevardet, loadvardet
 
 
 @torch.no_grad()
@@ -62,6 +64,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
+        detectmode='DETECT', # enabled detect mode
+        mode='KLD',
         ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -70,6 +74,15 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
     if is_url and is_file:
         source = check_file(source)  # download
+
+    #Save mode
+    smode = opt.mode
+    savevar(smode)
+    lmode = loadvar()
+
+    smodetrain = 'DETECT'
+    savevar(smodetrain)
+    lmodetrain = loadvardet()
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -113,21 +126,28 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         # Inference
         visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
         with torch.no_grad():
-            pred = model(im, augment=augment, visualize=visualize)[0]
+            pred = model(im, augment=augment, visualize=visualize)
         t3 = time_sync()
         dt[1] += t3 - t2
 
         # Apply NMS
         # pred: list*(n, [xylsθ, conf, cls]) θ ∈ [-pi/2, pi/2)
-        pred = non_max_suppression_obb(pred, conf_thres, iou_thres, classes, agnostic_nms, multi_label=True, max_det=max_det)
+        if lmode == 'CSL':
+            pred = non_max_suppression_obb(pred, conf_thres, iou_thres, classes, agnostic_nms, multi_label=True, max_det=max_det)
+        else:
+            pred = non_max_suppression_obb(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
         dt[2] += time_sync() - t3
+
 
         # Second-stage classifier (optional)
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
 
         # Process predictions
         for i, det in enumerate(pred):  # per image
-            pred_poly = rbox2poly(det[:, :5]) # (n, [x1 y1 x2 y2 x3 y3 x4 y4])
+            if isinstance(det,list):
+                det2 = det[0]
+                #print(det2.size())
+            pred_poly = rbox2poly(det2[:, :5]) # (n, [x1 y1 x2 y2 x3 y3 x4 y4])
             seen += 1
             if webcam:  # batch_size >= 1
                 p, im0, frame = path[i], im0s[i].copy(), dataset.count
@@ -142,19 +162,20 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
-            if len(det):
+            if len(det2):
                 # Rescale polys from img_size to im0 size
                 # det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
                 pred_poly = scale_polys(im.shape[2:], pred_poly, im0.shape)
-                det = torch.cat((pred_poly, det[:, -2:]), dim=1) # (n, [poly conf cls])
+                #print(pred_poly.size())
+                det2 = torch.cat((pred_poly, det2[:, -2:]), dim=1) # (n, [poly conf cls])
 
                 # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
+                for c in det2[:, -1].unique():
+                    n = (det2[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *poly, conf, cls in reversed(det):
+                for *poly, conf, cls in reversed(det2):
                     if save_txt:  # Write to file
                         # xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         # poly = poly.tolist()
@@ -236,6 +257,8 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=True, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
+    parser.add_argument('--detectmode', type=str, choices=['TRAIN', 'DETECT'], default='DETECT', help='enable or disable detect mode')
+    parser.add_argument('--mode', type=str, choices=['KLD', 'KFIOU', 'CSL'], default='KLD', help='Bbox Loss mode')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
