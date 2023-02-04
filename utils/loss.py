@@ -199,10 +199,12 @@ class ComputeLoss:
                 # theta Classification by Circular Smooth Label
                 t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
                 ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                """
                 if self.mode == 'CSL':
                     pass
                 else:
                     ltheta = torch.zeros_like(ltheta)
+                """
                     
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
@@ -415,10 +417,12 @@ class ComputeLossOTA:
                 # theta Classification by Circular Smooth Label
                 t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
                 ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                """
                 if self.mode == 'CSL':
                     pass
                 else:
                     ltheta = torch.zeros_like(ltheta)
+                """
 
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
