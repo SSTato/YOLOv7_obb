@@ -48,7 +48,7 @@ from utils.loss import ComputeLoss, ComputeLossOTA
 from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
-from utils.optsave import savevar, loadvar
+from utils.optsave import savevar, loadvar, savevardet, loadvardet
 
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
@@ -71,6 +71,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     smode = opt.mode
     savevar(smode)
     lmode = loadvar()
+
+    smodetrain = 'TRAIN'
+    savevar(smodetrain)
+    lmodetrain = loadvardet()
     
     # Directories
     w = save_dir / 'weights'  # weights dir
@@ -514,6 +518,7 @@ def parse_opt(known=False):
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     # parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
     parser.add_argument('--mode', type=str, choices=['KLD', 'KFIOU', 'CSL'], default='KLD', help='Bbox Loss mode')
+    parser.add_argument('--detectmode', type=str, choices=['TRAIN', 'DETECT'], default='TRAIN', help='enable or disable detect mode')
 
     # Weights & Biases arguments
     parser.add_argument('--entity', default=None, help='W&B: Entity')
