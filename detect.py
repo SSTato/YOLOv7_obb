@@ -112,11 +112,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
         # Inference
         visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
-        pred = model(im, augment=augment, visualize=visualize)
+        with torch.no_grad():
+            pred = model(im, augment=augment, visualize=visualize)[0]
         t3 = time_sync()
         dt[1] += t3 - t2
 
-        # NMS
+        # Apply NMS
         # pred: list*(n, [xylsθ, conf, cls]) θ ∈ [-pi/2, pi/2)
         pred = non_max_suppression_obb(pred, conf_thres, iou_thres, classes, agnostic_nms, multi_label=True, max_det=max_det)
         dt[2] += time_sync() - t3
