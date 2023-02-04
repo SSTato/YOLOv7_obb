@@ -189,22 +189,26 @@ class ComputeLoss:
 
                 # Classification
                 class_index = 5 + self.nc
-                if self.nc > 1:  # cls loss (only if multiple classes)
+                if self.nc > 1 and self.mode == 'CSL':  # cls loss (only if multiple classes)
                     # t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
                     t = torch.full_like(ps[:, 5:class_index], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
                     # lcls += self.BCEcls(ps[:, 5:], t)  # BCE
                     lcls += self.BCEcls(ps[:, 5:class_index], t)  # BCE
+
+                if self.nc > 1 and self.mode != 'CSL':  # cls loss (only if multiple classes)
+                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets
+                    t[range(n), tcls[i]] = self.cp
+                    #t[t==self.cp] = iou.detach().clamp(0).type(t.dtype)
+                    lcls += self.BCEcls(ps[:, 6:], t)  # BCE
                 
                 # theta Classification by Circular Smooth Label
                 t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
                 ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
-                """
                 if self.mode == 'CSL':
                     pass
                 else:
                     ltheta = torch.zeros_like(ltheta)
-                """
                     
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
@@ -388,7 +392,7 @@ class ComputeLossOTA:
                     kfiouloss, iou = self.kfioubox(pbox_theta, selected_tbox_theta)
                     lbox += kfiouloss.mean()
                 else:
-                    iou, _ = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
+                    iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
@@ -401,7 +405,7 @@ class ComputeLossOTA:
                 # Classification
                 selected_tcls = targets[i][:, 1].long()
                 class_index = 5 + self.nc
-                if self.nc > 1:  # cls loss (only if multiple classes)
+                if self.nc > 1 and self.mode == 'CSL':  # cls loss (only if multiple classes)
                     '''t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
                     t[range(n), selected_tcls] = self.cp
                     lcls += self.BCEcls(ps[:, 5:], t)  # BCE'''
@@ -410,6 +414,11 @@ class ComputeLossOTA:
                     t[range(n), selected_tcls] = self.cp
                     lcls += self.BCEcls(ps[:, 5:class_index], t)  # BCE
 
+                if self.nc > 1 and self.mode != 'CSL':  # cls loss (only if multiple classes)
+                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets
+                    t[range(n), selected_tcls] = self.cp
+                    lcls += self.BCEcls(ps[:, 6:], t)  # BCE
+
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
@@ -417,12 +426,10 @@ class ComputeLossOTA:
                 # theta Classification by Circular Smooth Label
                 t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
                 ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
-                """
                 if self.mode == 'CSL':
                     pass
                 else:
                     ltheta = torch.zeros_like(ltheta)
-                """
 
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
