@@ -81,7 +81,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     lmode = loadvar()
 
     smodetrain = 'DETECT'
-    savevar(smodetrain)
+    savevardet(smodetrain)
     lmodetrain = loadvardet()
 
     # Directories
