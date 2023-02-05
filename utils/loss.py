@@ -14,7 +14,7 @@ import torch.nn.functional as F
 
 from utils.general import box_iou,  xywh2xyxy
 from utils.kld_loss import compute_kld_loss,KLDloss #KLDloss_new, 
-from utils.kfiou import KFiou, xy_wh_r_2_xy_sigma_old
+from utils.kfiou import KFiou
 from utils.optsave import savevar, loadvar
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
