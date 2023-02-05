@@ -73,7 +73,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     lmode = loadvar()
 
     smodetrain = 'TRAIN'
-    savevar(smodetrain)
+    savevardet(smodetrain)
     lmodetrain = loadvardet()
     
     # Directories
