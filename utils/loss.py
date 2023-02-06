@@ -163,7 +163,7 @@ class ComputeLoss:
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 pbox_theta = torch.cat((pxy, pwh, pangle), 1)  # predicted box
                 selected_tbox_theta = torch.cat((tbox[i], ttheta[i]),1)
-                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
+                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype) #useless var
                 t_theta = tgaussian_theta[i].type(ps.dtype)
                 
                 if self.mode == 'KLD':
@@ -173,7 +173,7 @@ class ComputeLoss:
                     kfiouloss, iou = self.kfioubox(pbox_theta, selected_tbox_theta)
                     lbox += kfiouloss.mean()
                 else:
-                    iou, _ = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, ptheta=p_theta, ttheta=t_theta)  # iou(prediction, target)
+                    iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
                     lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
@@ -382,7 +382,7 @@ class ComputeLossOTA:
                 selected_tbox_theta = torch.cat((selected_tbox, ttheta),1)
                 # iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
                 # lbox += (1.0 - iou).mean()  # iou loss
-                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype)
+                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype) #useless var
                 t_theta = tgaussian_theta[i].type(ps.dtype)
                 
                 if self.mode == 'KLD':
