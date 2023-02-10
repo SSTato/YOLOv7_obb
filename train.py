@@ -30,7 +30,6 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-import val  # for end-of-epoch mAP
 from models.experimental import attempt_load
 from models.yolo import Model
 from utils.autoanchor import check_anchors
@@ -51,11 +50,10 @@ from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_devic
 from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
 
 #Save modes
-"""
 smodeang = int(input('Enter the angular definition mode; 1 for Long-Edge (CSL) [-90, +90) or 2 for Old OpenCV (KFIOU & KLD) [-90,0): ')
 savevarang(smodeang)
 lmodeang = loadvarang()
-"""
+import val  # for end-of-epoch mAP. Val.py is imported later to let the rboxs.utils import the "angular definition" off-model argument
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 local_rank = LOCAL_RANK
