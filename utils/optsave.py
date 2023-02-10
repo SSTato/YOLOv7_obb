@@ -13,7 +13,7 @@ def loadvar():
     with open('savevars.pkl', 'rb') as file:
         # Call load method to deserialze
         var = pickle.load(file)
-        print(var + 'mode selected')
+        print(var + ' loss mode selected')
         return var
 
 def savevardet(var2):
@@ -29,6 +29,21 @@ def loadvardet():
     with open('savevardet.pkl', 'rb') as file:
         # Call load method to deserialze
         var2 = pickle.load(file)
-        print(var2 + 'mode selected')
+        print(var2 + ' notebook mode selected')
         return var2
 
+def savevarang(var3):
+
+    # Open a file and use dump()
+    with open('savevarang.pkl', 'wb') as file:
+        # A new file will be created
+        pickle.dump(var3, file)
+
+def loadvarang():
+
+    # Open the file in binary mode
+    with open('savevarang.pkl', 'rb') as file:
+        # Call load method to deserialze
+        var3 = str(pickle.load(file))
+        print(var3 + ' angular definition mode selected')
+        return var3
