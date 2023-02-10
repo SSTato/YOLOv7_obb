@@ -7,8 +7,7 @@ import cv2
 import torch
 from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
 
-global lmode
-lmode = loadvarang()
+lmode = loadvar()
 
 def gaussian_label_cpu(label, num_class, u=0, sig=4.0):
     """
@@ -92,7 +91,7 @@ def poly2rbox(polys, num_cls_thata=180, radius=6.0, use_pi=False, use_gaussian=F
             theta += pi/2
         theta = regular_theta(theta) # limit theta ∈ [-pi/2, pi/2)
 
-        if lmode != 1:
+        if lmode != 'CSL':
             x, y, w, h, theta = lebox2ocbox(x, y, w, h, theta) #theta ∈ [-pi/2, 0)
         angle = (theta * 180 / pi) + 90 # θ ∈ [0， 180)
 
