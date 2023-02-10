@@ -44,7 +44,6 @@ def loadvarang():
     # Open the file in binary mode
     with open('savevarang.pkl', 'rb') as file:
         # Call load method to deserialze
-        var3 = int(pickle.load(file))
-        strvar3 = str(var3)
-        print(strvar3 + ' angular definition mode selected')
+        var3 = pickle.load(file)
+        print(var3 + ' angular definition mode selected')
         return var3
