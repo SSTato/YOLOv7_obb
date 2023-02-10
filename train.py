@@ -23,6 +23,7 @@ from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import SGD, Adam, AdamW, lr_scheduler
 from tqdm import tqdm
+from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -30,6 +31,12 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
+#Save modes
+smodeang = input('Enter the angular definition mode; LE90 for Long-Edge (CSL) [-90, +90) or OOCV for Old OpenCV (KFIOU & KLD) [-90,0): ')
+savevarang(smodeang)
+lmodeang = loadvarang()
+
+import val  # for end-of-epoch mAP. all the modules below are imported later to let the rboxs.utils import the "angular definition" off-model argument
 from models.experimental import attempt_load
 from models.yolo import Model
 from utils.autoanchor import check_anchors
@@ -47,13 +54,6 @@ from utils.loss import ComputeLoss, ComputeLossOTA
 from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
-from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
-
-#Save modes
-smodeang = int(input('Enter the angular definition mode; 1 for Long-Edge (CSL) [-90, +90) or 2 for Old OpenCV (KFIOU & KLD) [-90,0): ')
-savevarang(smodeang)
-lmodeang = loadvarang()
-import val  # for end-of-epoch mAP. Val.py is imported later to let the rboxs.utils import the "angular definition" off-model argument
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 local_rank = LOCAL_RANK
@@ -79,11 +79,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     smodetrain = 'TRAIN'
     savevardet(smodetrain)
     lmodetrain = loadvardet()
-    
-    smodeang = opt.angmode
-    savevarang(smodeang)
-    lmodeang = loadvarang()
-    
+
     # Directories
     w = save_dir / 'weights'  # weights dir
     (w.parent if evolve else w).mkdir(parents=True, exist_ok=True)  # make dir
