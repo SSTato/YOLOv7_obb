@@ -7,6 +7,12 @@ import cv2
 import torch
 from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
 
+try:
+    amode = loadvarang()
+except:
+    amode = 'LE90'
+    print("Angular definition not set, setting to LE90")
+
 def gaussian_label_cpu(label, num_class, u=0, sig=4.0):
     """
     转换成CSL Labels：
@@ -73,11 +79,6 @@ def poly2rbox(polys, num_cls_thata=180, radius=6.0, use_pi=False, use_gaussian=F
         elif 
             rboxes (array): (num_gts, [cx cy l s θ]) 
     """
-    try:
-        amode = loadvarang()
-    except:
-        amode = 'LE90'
-        print("Angular definition not set, setting to LE90")
 
     assert polys.shape[-1] == 8
     if use_gaussian:
