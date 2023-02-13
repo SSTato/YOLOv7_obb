@@ -35,8 +35,7 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 from utils.rboxs_utils import poly2rbox, rbox2poly
-from utils.optsave import savevar, loadvar, savevardet, loadvardet
-
+from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvargang
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
@@ -75,7 +74,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     if is_url and is_file:
         source = check_file(source)  # download
 
-    #Save mode
+    #Save modes
     smode = opt.mode
     savevar(smode)
     lmode = loadvar()
@@ -83,6 +82,10 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     smodetrain = 'DETECT'
     savevardet(smodetrain)
     lmodetrain = loadvardet()
+    
+    smodeang = opt.angmode
+    savevarang(smodeang)
+    lmodeang = loadvarang()
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -229,7 +232,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
 
-
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'data/HRSC2016/best.pt', help='model path(s)')
@@ -259,16 +261,15 @@ def parse_opt():
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--detectmode', type=str, choices=['TRAIN', 'DETECT'], default='DETECT', help='enable or disable detect mode')
     parser.add_argument('--mode', type=str, choices=['KLD', 'KFIOU', 'CSL'], default='KLD', help='Bbox Loss mode')
+    parser.add_argument('--angmode', type=str, choices=['LE90', 'OOCV'], default='KLD', help='Bbox Loss mode')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
     return opt
 
-
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
     run(**vars(opt))
-
 
 if __name__ == "__main__":
     opt = parse_opt()
