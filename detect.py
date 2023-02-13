@@ -35,7 +35,7 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 from utils.rboxs_utils import poly2rbox, rbox2poly
-from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvargang
+from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
 
 @torch.no_grad()
 def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
