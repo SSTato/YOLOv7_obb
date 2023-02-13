@@ -65,6 +65,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         dnn=False,  # use OpenCV DNN for ONNX inference
         detectmode='DETECT', # enabled detect mode
         mode='KLD',
+        angmode='LE90',
         ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -261,7 +262,7 @@ def parse_opt():
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--detectmode', type=str, choices=['TRAIN', 'DETECT'], default='DETECT', help='enable or disable detect mode')
     parser.add_argument('--mode', type=str, choices=['KLD', 'KFIOU', 'CSL'], default='KLD', help='Bbox Loss mode')
-    parser.add_argument('--angmode', type=str, choices=['LE90', 'OOCV'], default='KLD', help='Bbox Loss mode')
+    parser.add_argument('--angmode', type=str, choices=['LE90', 'OOCV'], default='LE90', help='Angular Definition mode')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
