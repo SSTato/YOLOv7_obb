@@ -47,3 +47,21 @@ def loadvarang():
         var3 = pickle.load(file)
         print(var3 + ' angular definition mode selected')
         return var3
+
+
+def savename(var4):
+    
+    # Open a file and use dump()
+    with open('savename.pkl', 'wb') as file:
+        # A new file will be created
+        pickle.dump(var4, file)
+
+
+def loadname():
+
+    # Open the file in binary mode
+    with open('savename.pkl', 'rb') as file:
+        # Call load method to deserialze
+        var4 = pickle.load(file)
+        print(var4 + ' folder name selected')
+        return var4
