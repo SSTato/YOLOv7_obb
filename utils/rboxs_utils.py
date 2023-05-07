@@ -5,6 +5,13 @@ import numpy as np
 pi = 3.141592
 import cv2
 import torch
+from utils.optsave import savevar, loadvar, savevardet, loadvardet, savevarang, loadvarang
+
+try:
+    amode = loadvarang()
+except:
+    amode = 'LE90'
+    print("Angular definition not set, setting to LE90")
 
 def gaussian_label_cpu(label, num_class, u=0, sig=4.0):
     """
@@ -36,6 +43,26 @@ def regular_theta(theta, mode='180', start=-pi/2):
     theta = theta % cycle
     return theta + start
 
+def lebox2ocbox(x, y, w, h, theta):
+    x, y, = x, y #ocbox[:2] = lebox[:2]
+    #ocbox[-2:] = lebox[-2:]
+    if theta < 0:
+        return x, y, w, h, theta
+    else:
+        w, h = h, w
+        theta -= pi/2
+        return x, y, w, h, theta
+
+def ocbox2lebox(x, y, w, h, theta):
+    x, y, = x, y #lebox[:2] = ocbox[:2]
+    #lebox[-2:] = ocbox[-2:]
+    if w == max(w, h): 
+        return x, y, w, h, theta
+    else:
+        w, h = h, w
+        theta += pi/2
+        return x, y, w, h, theta
+
 def poly2rbox(polys, num_cls_thata=180, radius=6.0, use_pi=False, use_gaussian=False):
     """
     Trans poly format to rbox format.
@@ -52,6 +79,7 @@ def poly2rbox(polys, num_cls_thata=180, radius=6.0, use_pi=False, use_gaussian=F
         elif 
             rboxes (array): (num_gts, [cx cy l s θ]) 
     """
+
     assert polys.shape[-1] == 8
     if use_gaussian:
         csl_labels = []
@@ -67,6 +95,9 @@ def poly2rbox(polys, num_cls_thata=180, radius=6.0, use_pi=False, use_gaussian=F
             w, h = h, w
             theta += pi/2
         theta = regular_theta(theta) # limit theta ∈ [-pi/2, pi/2)
+
+        if amode == 'OOCV':
+            x, y, w, h, theta = lebox2ocbox(x, y, w, h, theta) #theta ∈ [-pi/2, 0)
         angle = (theta * 180 / pi) + 90 # θ ∈ [0， 180)
 
         if not use_pi: # 采用angle弧度制 θ ∈ [0， 180)
@@ -115,11 +146,12 @@ def rbox2poly(obboxes):
     if isinstance(obboxes, torch.Tensor):
         center, w, h, theta = obboxes[:, :2], obboxes[:, 2:3], obboxes[:, 3:4], obboxes[:, 4:5]
         Cos, Sin = torch.cos(theta), torch.sin(theta)
-
+        
         vector1 = torch.cat(
             (w/2 * Cos, -w/2 * Sin), dim=-1)
         vector2 = torch.cat(
             (-h/2 * Sin, -h/2 * Cos), dim=-1)
+
         point1 = center + vector1 + vector2
         point2 = center + vector1 - vector2
         point3 = center - vector1 - vector2

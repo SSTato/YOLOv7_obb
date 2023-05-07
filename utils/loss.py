@@ -5,6 +5,7 @@ Loss functions
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from utils.metrics import bbox_iou
 from utils.torch_utils import is_parallel
@@ -12,7 +13,9 @@ from utils.torch_utils import is_parallel
 import torch.nn.functional as F
 
 from utils.general import box_iou,  xywh2xyxy
-
+from utils.kld_loss import compute_kld_loss,KLDloss #KLDloss_new, 
+from utils.kfiou import KFiou
+from utils.optsave import savevar, loadvar
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
@@ -98,6 +101,7 @@ class ComputeLoss:
         self.sort_obj_iou = False
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
+        self.mode = loadvar()
 
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
@@ -118,8 +122,11 @@ class ComputeLoss:
         self.balance = {3: [4.0, 1.0, 0.4]}.get(det.nl, [4.0, 1.0, 0.25, 0.06, 0.02])  # P3-P7
         # self.ssi = list(det.stride).index(16) if autobalance else 0  # stride 16 index
         self.ssi = list(self.stride).index(16) if autobalance else 0  # stride 16 index
+        #self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, model.gr, h, autobalance
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, 1.0, h, autobalance
         self.BCEtheta = BCEtheta
+        self.kldbbox = KLDloss(taf=1.0,fun='sqrt')
+        self.kfioubox = KFiou(beta=1.0 / 9.0, eps=1e-6, fun='none')
         for k in 'na', 'nc', 'nl', 'anchors':
             setattr(self, k, getattr(det, k))
 
@@ -137,7 +144,7 @@ class ComputeLoss:
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
         ltheta = torch.zeros(1, device=device)
         # tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
-        tcls, tbox, indices, anchors, tgaussian_theta = self.build_targets(p, targets)  # targets
+        tcls, tbox, indices, anchors, tgaussian_theta, ttheta = self.build_targets(p, targets)  # targets
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
@@ -149,32 +156,60 @@ class ComputeLoss:
                 ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets, (n_targets, self.no)
 
                 # Regression
+                class_index = 5 + self.nc #moved up to assign vars
                 pxy = ps[:, :2].sigmoid() * 2 - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i] # featuremap pixel
+                pangle = (ps[:, 4:5].sigmoid() - 0.5) * torch.pi
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
-                iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
+                pbox_theta = torch.cat((pxy, pwh, pangle), 1)  # predicted box
+                selected_tbox_theta = torch.cat((tbox[i], ttheta[i]),1)
+                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype) #useless var
+                t_theta = tgaussian_theta[i].type(ps.dtype)
+                
+                if self.mode == 'KLD':
+                    kldloss = self.kldbbox(pbox_theta, selected_tbox_theta)
+                    lbox += kldloss.mean()  # iou loss
+                elif self.mode == 'KFIOU':
+                    kfiouloss, iou = self.kfioubox(pbox_theta, selected_tbox_theta)
+                    lbox += kfiouloss.mean()
+                else:
+                    iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
+                    lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
-                score_iou = iou.detach().clamp(0).type(tobj.dtype)
-                if self.sort_obj_iou:
-                    sort_id = torch.argsort(score_iou)
-                    b, a, gj, gi, score_iou = b[sort_id], a[sort_id], gj[sort_id], gi[sort_id], score_iou[sort_id]
-                tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * score_iou  # iou ratio
+                if self.mode == 'KLD':
+                    tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * (1 - kldloss).detach().clamp(min=0, max=1).type(tobj.dtype) # iou ratio
+                else:
+                    iou = iou.type(torch.FloatTensor).to(device)
+                    score_iou = iou.detach().clamp(0).type(tobj.dtype)
+                    if self.sort_obj_iou:
+                        sort_id = torch.argsort(score_iou)
+                        b, a, gj, gi, score_iou = b[sort_id], a[sort_id], gj[sort_id], gi[sort_id], score_iou[sort_id]
+                    tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * score_iou  # iou ratio
 
                 # Classification
                 class_index = 5 + self.nc
-                if self.nc > 1:  # cls loss (only if multiple classes)
+                if self.nc > 1 and self.mode == 'CSL':  # cls loss (only if multiple classes)
                     # t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
                     t = torch.full_like(ps[:, 5:class_index], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
                     # lcls += self.BCEcls(ps[:, 5:], t)  # BCE
                     lcls += self.BCEcls(ps[:, 5:class_index], t)  # BCE
+
+                if self.nc > 1 and self.mode != 'CSL':  # cls loss (only if multiple classes)
+                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets
+                    t[range(n), tcls[i]] = self.cp
+                    #t[t==self.cp] = iou.detach().clamp(0).type(t.dtype)
+                    lcls += self.BCEcls(ps[:, 6:], t)  # BCE
                 
                 # theta Classification by Circular Smooth Label
                 t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
                 ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
-
+                if self.mode == 'CSL':
+                    pass
+                else:
+                    ltheta = torch.zeros_like(ltheta)
+                    
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
@@ -191,7 +226,7 @@ class ComputeLoss:
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
         ltheta *= self.hyp['theta']
-        bs = tobj.shape[0]  # batch size
+        bs = tobj.shape[0] # batch size
 
         # return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
         return (lbox + lobj + lcls + ltheta) * bs, torch.cat((lbox, lobj, lcls, ltheta)).detach()
@@ -212,7 +247,7 @@ class ComputeLoss:
         """
         # Build targets for compute_loss()
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
-        tcls, tbox, indices, anch = [], [], [], []
+        tcls, tbox, tbox_theta, indices, anch = [], [], [], [], []
         # ttheta, tgaussian_theta = [], []
         tgaussian_theta = []
         # gain = torch.ones(7, device=targets.device)  # normalized to gridspace gain
@@ -261,8 +296,8 @@ class ComputeLoss:
             b, c = t[:, :2].long().T  # image, class; (n_filter2)
             gxy = t[:, 2:4]  # grid xy
             gwh = t[:, 4:6]  # grid wh
-            # theta = t[:, 6]
             gaussian_theta_labels = t[:, 7:-1]
+            theta = t[:, 6:7]
             gij = (gxy - offsets).long()
             gi, gj = gij.T  # grid xy indices
 
@@ -273,11 +308,11 @@ class ComputeLoss:
             tbox.append(torch.cat((gxy - gij, gwh), 1))  # box
             anch.append(anchors[a])  # anchors
             tcls.append(c)  # class
-            # ttheta.append(theta) # theta, θ∈[-pi/2, pi/2)
+            tbox_theta.append(theta) # theta, θ∈[-pi/2, pi/2)
             tgaussian_theta.append(gaussian_theta_labels)
 
         # return tcls, tbox, indices, anch
-        return tcls, tbox, indices, anch, tgaussian_theta #, ttheta
+        return tcls, tbox, indices, anch, tgaussian_theta, tbox_theta
 
 
 class ComputeLossOTA:
@@ -286,6 +321,7 @@ class ComputeLossOTA:
         self.sort_obj_iou = False
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
+        self.mode = loadvar()
 
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
@@ -308,6 +344,8 @@ class ComputeLossOTA:
         self.ssi = list(self.stride).index(16) if autobalance else 0  # stride 16 index
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, 1.0, h, autobalance
         self.BCEtheta = BCEtheta
+        self.kldbbox = KLDloss(taf=1.0,fun='sqrt')
+        self.kfioubox = KFiou(beta=1.0 / 9.0, eps=1e-6, fun='none')
         for k in 'na', 'nc', 'nl', 'anchors':
             setattr(self, k, getattr(det, k))
 
@@ -330,15 +368,32 @@ class ComputeLossOTA:
                 ps1 = pi[b1, a1, gj1, gi1]
 
                 # Regression
+                class_index = 5 + self.nc #moved up to assign vars
                 grid = torch.stack([gi, gj], dim=1)
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
                 # pxy = ps[:, :2].sigmoid() * 3. - 1.
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
+                pangle = (ps[:, 4:5].sigmoid() - 0.5) * torch.pi
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
+                pbox_theta = torch.cat((pxy, pwh, pangle), 1)  # predicted box
                 selected_tbox = targets[i][:, 2:6] * pre_gen_gains[i]
                 selected_tbox[:, :2] -= grid
-                iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
+                ttheta = targets[i][:, 6:7]
+                selected_tbox_theta = torch.cat((selected_tbox, ttheta),1)
+                # iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, KFIOU=True, ptheta=0, ttheta=tgaussian_theta)  # iou(prediction, target)
+                # lbox += (1.0 - iou).mean()  # iou loss
+                p_theta = torch.clone(ps[:, class_index:]).type(ps.dtype) #useless var
+                t_theta = tgaussian_theta[i].type(ps.dtype)
+                
+                if self.mode == 'KLD':
+                    kldloss = self.kldbbox(pbox_theta, selected_tbox_theta)
+                    lbox += kldloss.mean()  # iou loss
+                elif self.mode == 'KFIOU':
+                    kfiouloss, iou = self.kfioubox(pbox_theta, selected_tbox_theta)
+                    lbox += kfiouloss.mean()
+                else:
+                    iou = bbox_iou(pbox.T, selected_tbox, x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
+                    lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
@@ -350,7 +405,7 @@ class ComputeLossOTA:
                 # Classification
                 selected_tcls = targets[i][:, 1].long()
                 class_index = 5 + self.nc
-                if self.nc > 1:  # cls loss (only if multiple classes)
+                if self.nc > 1 and self.mode == 'CSL':  # cls loss (only if multiple classes)
                     '''t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
                     t[range(n), selected_tcls] = self.cp
                     lcls += self.BCEcls(ps[:, 5:], t)  # BCE'''
@@ -359,12 +414,22 @@ class ComputeLossOTA:
                     t[range(n), selected_tcls] = self.cp
                     lcls += self.BCEcls(ps[:, 5:class_index], t)  # BCE
 
+                if self.nc > 1 and self.mode != 'CSL':  # cls loss (only if multiple classes)
+                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets
+                    t[range(n), selected_tcls] = self.cp
+                    lcls += self.BCEcls(ps[:, 6:], t)  # BCE
+
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
-
-                t_theta = tgaussian_theta[i].type(ps1.dtype)  # target theta_gaussian_labels
-                ltheta += self.BCEtheta(ps1[:, class_index:], t_theta)
+                
+                # theta Classification by Circular Smooth Label
+                t_theta = tgaussian_theta[i].type(ps.dtype) # target theta_gaussian_labels
+                ltheta += self.BCEtheta(ps[:, class_index:], t_theta)
+                if self.mode == 'CSL':
+                    pass
+                else:
+                    ltheta = torch.zeros_like(ltheta)
 
             obji = self.BCEobj(pi[..., 4], tobj)
             lobj += obji * self.balance[i]  # obj loss
