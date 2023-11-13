@@ -4,7 +4,7 @@ Rotating object detection using YOLOv7 and CSL.
 
 ### 项目用途
 使用YOLOv7和CSL实现旋转目标检测，在DOTA数据集和HRSC2016数据集上均取得良好结果。
-（train_ota.py未上传）
+（train_ota.py已上传）
 
 ### 效果展示
 <details>
